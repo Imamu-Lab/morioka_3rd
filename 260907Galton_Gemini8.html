@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>二項分布を視覚的に理解しよう</title>
+    
+    <!-- LaTeX数式表示用ライブラリ (MathJax) -->
+    <script>
+    MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+    };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; max-width: 1150px; margin: 0 auto; }
+        .main-panel { flex: 1; min-width: 650px; display: flex; flex-direction: column; gap: 15px; }
+        
+        /* キャンバスを囲む個別パネル（枠）と右上の丸い開閉ボタンのデザイン */
+        .canvas-card { position: relative; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: left; }
+        .canvas-card h4 { margin: 0 0 10px 0; padding-right: 35px; color: #0056b3; font-size: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 6px; }
+        
+        .collapse-btn-round {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 1px solid #ced4da;
+            background: #f1f3f5;
+            color: #495057;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .collapse-btn-round:hover { background: #e2e6ea; }
+
+        .card-body { transition: max-height 0.3s ease; overflow: hidden; }
+        .card-body.collapsed { display: none; }
+
+        canvas { background: #fafbfc; border-radius: 6px; display: block; margin: 0 auto; border: 1px solid #eaeaea; }
+        
+        /* コントロールと統計パネルのデザイン */
+        .panel-container { width: 360px; display: flex; flex-direction: column; gap: 15px; }
+        .panel { background: white; padding: 18px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: left; }
+        .panel h3 { margin-top: 0; color: #0056b3; border-bottom: 2px solid #e9ecef; padding-bottom: 8px; font-size: 17px; }
+        
+        .control-group { margin-bottom: 12px; }
+        .control-label { display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 4px; color: #444; font-size: 14px; }
+        .control-subtext { font-size: 11px; color: #666; font-weight: normal; margin-bottom: 4px; line-height: 1.3; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .prob-input-box { width: 70px; text-align: right; font-weight: bold; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; padding: 2px 4px; background: #fff; }
+        
+        /* モード切替タブ */
+        .mode-tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 8px; font-size: 11px; font-weight: bold; cursor: pointer; border: 1px solid #0056b3; background: #fff; color: #0056b3; border-radius: 4px; text-align: center; }
+        .tab-btn.active { background: #0056b3; color: #fff; }
+
+        .stat-box { margin-bottom: 10px; padding: 8px 10px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid #0056b3; }
+        .stat-box.empirical { border-left-color: #ff6384; }
+        .stat-box.binomial { border-left-color: #28a745; }
+        .stat-label { font-size: 12px; color: #444; font-weight: bold; line-height: 1.3; }
+        .stat-formula { font-size: 10px; color: #888; font-weight: normal; display: block; margin-top: 2px; }
+        .stat-value { font-size: 14px; font-weight: bold; margin-top: 3px; }
+        
+        .checkbox-group { margin-top: 8px; padding: 6px 8px; background: #eef2f7; border-radius: 4px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .checkbox-group input { width: 16px; height: 16px; cursor: pointer; }
+
+        .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        button { padding: 8px; font-size: 13px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: #fff; font-weight: bold; flex: 1 1 45%; }
+        button:hover { background: #e9ecef; }
+        button.primary { background: #0056b3; color: white; border: none; }
+        button.primary:hover { background: #004494; }
+        button.danger { background: #dc3545; color: white; border: none; }
+        button.danger:hover { background: #c82333; }
+        
+        .progress-text { font-size: 13px; color: #555; text-align: center; margin-top: 5px; font-weight: bold; }
+        .ci-legend { font-size: 11px; background: #e2f0d9; border: 1px solid #c8e1b9; padding: 6px; border-radius: 4px; margin-top: 8px; line-height: 1.4; }
+        .theory-desc { font-size: 11px; color: #555; margin: 4px 0 8px 0; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <h2>二項分布を視覚的に理解しよう</h2>
+    <p>段数や確率を変えて、二項分布の基礎から正規分布・信頼区間へのつながりを確認しましょう。</p>
+    
+    <div class="container">
+        <!-- グラフを上下の枠に配置 -->
+        <div class="main-panel">
+            <div class="canvas-card">
+                <button class="collapse-btn-round" id="galton-btn" onclick="toggleCard('galton-body', 'galton-btn')">▲</button>
+                <h4>【標本に基づく確率分布】ゴルトンボード シミュレーション</h4>
+                <div class="card-body" id="galton-body">
+                    <canvas id="galtonCanvas" width="620" height="520"></canvas>
+                </div>
+            </div>
+
+            <div class="canvas-card">
+                <button class="collapse-btn-round" id="theory-btn" onclick="toggleCard('theory-body', 'theory-btn')">▼</button>
+                <h4>【理論上の確率分布】二項分布 $B(n, p)$ の確率 $P(X = k)$ のグラフ</h4>
+                <div class="card-body collapsed" id="theory-body">
+                    <div class="theory-desc">
+                        💡 <b>グラフの見方:</b> 縦軸は「確率 $P(X=k)$」、横軸は「成功回数 $k$（右に転がった数）」を表します。数学的に計算される厳密な確率の分布です。
+                    </div>
+                    <canvas id="theoryCanvas" width="620" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="progress-text" id="progress-info">待機中</div>
+        </div>
+
+        <div class="panel-container">
+            <!-- モード切替パネル -->
+            <div class="panel" style="padding-bottom: 10px;">
+                <h3>表示モード切替</h3>
+                <div class="mode-tabs">
+                    <div class="tab-btn active" id="tab-count" onclick="setMode('count')">① 数理的確率モード</div>
+                    <div class="tab-btn" id="tab-proportion" onclick="setMode('proportion')">② 統計的推測モード</div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>試行回数 / 段数 ($n$)</span>
+                        <span id="rows-display">12</span>
+                    </div>
+                    <input type="range" id="rows-slider" min="1" max="30" step="1" value="12">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>確率 ($p$)</span>
+                        <input type="text" id="prob-input" class="prob-input-box" value="0.5" onchange="onProbInputChanged(this.value)" placeholder="例: 1/2">
+                    </div>
+                    <div class="control-subtext">（1回の試行で右に転がる確率 / 小数や分数 `1/2` 入力可）</div>
+                    <input type="range" id="prob-slider" min="0.05" max="0.95" step="0.01" value="0.5">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>落下スピード</span>
+                        <span id="speed-display">とても遅い</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0.05" max="0.8" step="0.05" value="0.1">
+                </div>
+
+                <label class="checkbox-group">
+                    <input type="checkbox" id="show-polygon" onchange="drawAll()">
+                    <span>度数折れ線を表示する</span>
+                </label>
+
+                <label class="checkbox-group">
+                    <input type="checkbox" id="show-normal-curve" onchange="drawAll()">
+                    <span>正規分布の近似曲線を重ねる</span>
+                </label>
+
+                <label class="checkbox-group">
+                    <input type="checkbox" id="show-sd-range" onchange="drawAll()">
+                    <span>標準偏差の幅 ($\mu \pm \sigma$) を表示する</span>
+                </label>
+
+                <div class="btn-group" style="margin-top: 10px;">
+                    <button class="primary" onclick="dropBalls(1)" style="background: #28a745;">1個落とす</button>
+                    <button class="primary" onclick="dropBalls(10)" style="background: #17a2b8;">10個落とす</button>
+                    <button class="primary" onclick="dropBalls(100)">100個落とす</button>
+                    <button class="primary" onclick="dropBalls(1000)">1000個落とす</button>
+                    <button class="primary" onclick="dropBalls(Infinity)" style="flex-basis: 100%;">連続で落とす</button>
+                    <button class="danger" onclick="stopSpawning()">ストップ</button>
+                    <button onclick="resetSimulation()">リセット</button>
+                </div>
+                
+                <div id="ci-info-box" class="ci-legend" style="display:none;">
+                    📍 <b>95%信頼区間の意味:</b><br>
+                    最後の1回の投下で得られた $\hat{p}$ から計算した区間に、真の母比率 $p$ が<b>含まれていれば緑線</b>、外れていれば赤線で表示されます。
+                </div>
+            </div>
+
+            <!-- 統計データパネル -->
+            <div class="panel">
+                <h3>統計データ <span style="font-size: 13px; font-weight: normal; float: right; margin-top: 4px;">総数 $N$: <span id="val-count" style="font-weight:bold;">0</span></span></h3>
+
+                <!-- 数理的確率モード用パネル -->
+                <div id="panel-count-stats">
+                    <h4 style="color:#28a745; margin: 4px 0 4px; font-size: 13px;">二項分布 $B(n, p)$ の基礎</h4>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">期待値 $E(X)$<span class="stat-formula">$np$</span></div>
+                            <div class="stat-value" id="val-bin-mean">-</div>
+                        </div>
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">分散 $V(X)$<span class="stat-formula">$np(1-p)$</span></div>
+                            <div class="stat-value" id="val-bin-var">-</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">標準偏差 $\sigma$<span class="stat-formula">$\sqrt{np(1-p)}$</span></div>
+                            <div class="stat-value" id="val-bin-sd">-</div>
+                        </div>
+                        <div class="stat-box binomial" style="flex: 1; visibility: hidden; border: none; background: none; padding: 0;"></div>
+                    </div>
+
+                    <h4 style="color:#ff6384; margin: 8px 0 4px; font-size: 13px;">実測値 (統計的推測)</h4>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本平均 $\bar{x}$<span class="stat-formula">$\frac{1}{N}\sum x_i$</span></div>
+                            <div class="stat-value" id="val-emp-mean">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本分散 $s^2$<span class="stat-formula">$\frac{1}{N}\sum(x_i-\bar{x})^2$</span></div>
+                            <div class="stat-value" id="val-emp-var">-</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本標準偏差 $s$<span class="stat-formula">$\sqrt{s^2}$</span></div>
+                            <div class="stat-value" id="val-emp-sd">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1; visibility: hidden; border: none; background: none; padding: 0;"></div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本比率 $\hat{p}$<span class="stat-formula">$\frac{\bar{x}}{n}$</span></div>
+                            <div class="stat-value" id="val-emp-phat">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">母比率 $p$<span class="stat-formula">設定パラメータ</span></div>
+                            <div class="stat-value" id="val-pop-p">0.50</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 統計的推測モード用パネル（ご指定の順序に再編） -->
+                <div id="panel-prop-stats" style="display:none;">
+                    <h4 style="color:#28a745; margin: 4px 0 4px; font-size: 13px;">二項分布の母数（基礎）</h4>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">母平均 $\mu$<span class="stat-formula">期待値 $np$</span></div>
+                            <div class="stat-value" id="val-prop-bin-mean">-</div>
+                        </div>
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">母分散 $\sigma^2$<span class="stat-formula">$np(1-p)$</span></div>
+                            <div class="stat-value" id="val-prop-bin-var">-</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+                        <div class="stat-box binomial" style="flex: 1;">
+                            <div class="stat-label">母標準偏差 $\sigma$<span class="stat-formula">$\sqrt{np(1-p)}$</span></div>
+                            <div class="stat-value" id="val-prop-bin-sd">-</div>
+                        </div>
+                        <div class="stat-box binomial" style="flex: 1; visibility: hidden; border: none; background: none; padding: 0;"></div>
+                    </div>
+
+                    <h4 style="color:#ff6384; margin: 8px 0 4px; font-size: 13px;">実測値 (統計的推測)</h4>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本平均 $\bar{x}$<span class="stat-formula">$\frac{1}{N}\sum x_i$</span></div>
+                            <div class="stat-value" id="val-prop-mean">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本分散 $s^2$<span class="stat-formula">$\frac{1}{N}\sum(x_i-\bar{x})^2$</span></div>
+                            <div class="stat-value" id="val-prop-var">-</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本標準偏差 $s$<span class="stat-formula">$\sqrt{s^2}$</span></div>
+                            <div class="stat-value" id="val-prop-sd">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1; visibility: hidden; border: none; background: none; padding: 0;"></div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本平均の期待値<span class="stat-formula">$E(\bar{x}) = \mu$</span></div>
+                            <div class="stat-value" id="val-prop-emean">-</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本平均の標準偏差<span class="stat-formula">$\frac{s}{\sqrt{N}}$ または $\sqrt{\frac{\hat{p}(1-\hat{p})}{N}}$</span></div>
+                            <div class="stat-value" id="val-prop-se">-</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">母比率 $p$<span class="stat-formula">設定パラメータ</span></div>
+                            <div class="stat-value" id="val-prop-pop-p">0.50</div>
+                        </div>
+                        <div class="stat-box empirical" style="flex: 1;">
+                            <div class="stat-label">標本比率 $\hat{p}$<span class="stat-formula">$\frac{\bar{x}}{n}$</span></div>
+                            <div class="stat-value" id="val-prop-phat">-</div>
+                        </div>
+                    </div>
+                    <div class="stat-box empirical">
+                        <div class="stat-label">95%信頼区間<span class="stat-formula">$\hat{p} \pm 1.96 \times (\text{標本平均の標準偏差})$</span></div>
+                        <div class="stat-value" id="val-prop-ci" style="font-size: 13px; margin-top: 5px;">-</div>
+                    </div>
+                    <div class="ci-legend" style="margin-top: 10px; background: #e8f4fd; border-color: #b8daff; color: #004085;">
+                        ℹ️ <b>統計的推測のポイント:</b><br>
+                        ・<b>赤色の位置</b>：設定された真の母比率 $p$<span id="desc-true-p">（0.50）</span><br>
+                        ・<b>緑/赤のバー</b>：標本から得られた 95% 信頼区間の幅
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('galtonCanvas');
+        const ctx = canvas.getContext('2d');
+        const theoryCanvas = document.getElementById('theoryCanvas');
+        const theoryCtx = theoryCanvas.getContext('2d');
+
+        let rows = 12;              // 釘の段数 (可変, 最大30)
+        let p = 0.5;                // 母比率・確率
+        let dropSpeed = 0.1;        // とても遅い
+        const maxActiveBalls = 150; 
+        
+        let currentMode = 'count';  
+        
+        const pegRadius = 3;
+        const ballRadius = 4;
+        const startX = canvas.width / 2;
+        const startY = 25;
+        
+        let balls = [];
+        let bins = new Array(rows + 1).fill(0);
+        
+        let isSpawning = false;
+        let droppedCount = 0;       
+        let completedCount = 0;     
+        let targetDropCount = 0;    
+        
+        let theoMean, theoVar, theoSD;
+        let lastEmpiricalProp = 0;
+        let lastCI = { lower: 0, upper: 0, covered: true };
+
+        // カードの開閉トグル用関数
+        function toggleCard(bodyId, btnId) {
+            let body = document.getElementById(bodyId);
+            let btn = document.getElementById(btnId);
+            if (body.classList.contains('collapsed')) {
+                body.classList.remove('collapsed');
+                btn.innerText = '▲';
+            } else {
+                body.classList.add('collapsed');
+                btn.innerText = '▼';
+            }
+        }
+
+        function getLayout() {
+            let rowHeight = Math.max(12, Math.min(22, 260 / rows));
+            let colWidth = Math.max(8, Math.min(18, 250 / rows));
+            return { rowHeight, colWidth };
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('tab-count').className = mode === 'count' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('tab-proportion').className = mode === 'proportion' ? 'tab-btn active' : 'tab-btn';
+            
+            document.getElementById('panel-count-stats').style.display = mode === 'count' ? 'block' : 'none';
+            document.getElementById('panel-prop-stats').style.display = mode === 'proportion' ? 'block' : 'none';
+            document.getElementById('ci-info-box').style.display = mode === 'proportion' ? 'block' : 'none';
+            
+            resetSimulation();
+            if (window.MathJax && window.MathJax.typeset) {
+                window.MathJax.typeset();
+            }
+        }
+
+        // 小数をきれいな分数文字列に変換するヘルパー
+        function getFractionStr(val) {
+            if (Number.isInteger(val)) return val.toString();
+            let bestNum = 1, bestDen = 1, minDiff = 1;
+            for (let den = 1; den <= 30; den++) {
+                let num = Math.round(val * den);
+                let diff = Math.abs(val - num / den);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestNum = num;
+                    bestDen = den;
+                }
+            }
+            if (minDiff < 0.0001) {
+                function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+                let g = gcd(bestNum, bestDen);
+                let n = bestNum / g;
+                let d = bestDen / g;
+                if (d === 1) return n.toString();
+                return `\\frac{${n}}{${d}}`;
+            }
+            return val.toFixed(2);
+        }
+
+        function updateTheoStats() {
+            theoMean = rows * p;
+            theoVar = Math.max(rows * p * (1 - p), 0.0001);
+            theoSD = Math.sqrt(theoVar);
+
+            let pStr = getFractionStr(p);
+            let qVal = 1 - p;
+            let qStr = getFractionStr(qVal);
+
+            let meanFormula = `${rows} \\times ${pStr}`;
+            let meanHtml = `$${meanFormula} = ${theoMean.toFixed(2)}$`;
+
+            let varFormula = `${rows} \\times ${pStr} \\times ${qStr}`;
+            let varHtml = `$${varFormula} = ${theoVar.toFixed(2)}$`;
+
+            let sdInside = (rows * p * (1 - p));
+            let sdFormula = `\\sqrt{${sdInside.toFixed(2)}}`;
+            let sdHtml = `$${sdFormula} \\fallingdotseq ${theoSD.toFixed(2)}$`;
+
+            // 数理的確率モードの反映
+            document.getElementById('val-bin-mean').innerHTML = meanHtml;
+            document.getElementById('val-bin-var').innerHTML = varHtml;
+            document.getElementById('val-bin-sd').innerHTML = sdHtml;
+            
+            // 統計的推測モードの反映
+            let propBinMean = document.getElementById('val-prop-bin-mean');
+            if (propBinMean) propBinMean.innerHTML = meanHtml;
+            let propBinVar = document.getElementById('val-prop-bin-var');
+            if (propBinVar) propBinVar.innerHTML = varHtml;
+            let propBinSd = document.getElementById('val-prop-bin-sd');
+            if (propBinSd) propBinSd.innerHTML = sdHtml;
+
+            let popP = document.getElementById('val-pop-p');
+            if (popP) popP.innerText = p.toFixed(2);
+            let propPopP = document.getElementById('val-prop-pop-p');
+            if (propPopP) propPopP.innerText = p.toFixed(2);
+
+            let descP = document.getElementById('desc-true-p');
+            if (descP) descP.innerText = `（${p.toFixed(2)}）`;
+
+            if (window.MathJax && window.MathJax.typeset) {
+                window.MathJax.typeset([
+                    document.getElementById('val-bin-mean'),
+                    document.getElementById('val-bin-var'),
+                    document.getElementById('val-bin-sd'),
+                    document.getElementById('val-prop-bin-mean'),
+                    document.getElementById('val-prop-bin-var'),
+                    document.getElementById('val-prop-bin-sd')
+                ]);
+            }
+        }
+
+        function onProbInputChanged(val) {
+            val = val.trim();
+            let newP = NaN;
+            if (val.includes('/')) {
+                let parts = val.split('/');
+                if (parts.length === 2) {
+                    let num = parseFloat(parts[0]);
+                    let den = parseFloat(parts[1]);
+                    if (!isNaN(num) && !isNaN(den) && den !== 0) {
+                        newP = num / den;
+                    }
+                }
+            } else {
+                newP = parseFloat(val);
+            }
+
+            if (!isNaN(newP)) {
+                if (newP < 0.05) newP = 0.05;
+                if (newP > 0.95) newP = 0.95;
+                p = newP;
+                document.getElementById('prob-slider').value = p;
+                document.getElementById('prob-input').value = val; 
+                updateTheoStats();
+                resetSimulation();
+            } else {
+                document.getElementById('prob-input').value = p.toFixed(2);
+            }
+        }
+
+        document.getElementById('rows-slider').addEventListener('input', function(e) {
+            rows = parseInt(e.target.value);
+            document.getElementById('rows-display').innerText = rows;
+            bins = new Array(rows + 1).fill(0);
+            updateTheoStats();
+            resetSimulation();
+        });
+
+        document.getElementById('prob-slider').addEventListener('input', function(e) {
+            p = parseFloat(e.target.value);
+            document.getElementById('prob-input').value = p.toFixed(2);
+            updateTheoStats();
+            resetSimulation(); 
+        });
+
+        document.getElementById('speed-slider').addEventListener('input', function(e) {
+            dropSpeed = parseFloat(e.target.value);
+            let speedText = "標準";
+            if (dropSpeed <= 0.1) speedText = "とても遅い";
+            else if (dropSpeed <= 0.2) speedText = "遅い";
+            else if (dropSpeed >= 0.6) speedText = "とても速い";
+            else if (dropSpeed >= 0.35) speedText = "速い";
+            document.getElementById('speed-display').innerText = speedText;
+        });
+
+        function updateStats() {
+            document.getElementById('val-count').innerText = completedCount;
+            
+            const activeBalls = droppedCount - completedCount;
+            if (isSpawning || activeBalls > 0) {
+                let targetText = targetDropCount === Infinity ? "連続実行中" : `目標: ${targetDropCount}個`;
+                document.getElementById('progress-info').innerText = `${targetText} （投下済み: ${droppedCount} / 完了: ${completedCount}）`;
+            } else {
+                document.getElementById('progress-info').innerText = "待機中";
+            }
+            
+            if (completedCount === 0) {
+                document.getElementById('val-emp-mean').innerText = "-";
+                document.getElementById('val-emp-var').innerText = "-";
+                document.getElementById('val-emp-sd').innerText = "-";
+                document.getElementById('val-emp-phat').innerText = "-";
+                
+                document.getElementById('val-prop-mean').innerText = "-";
+                document.getElementById('val-prop-var').innerText = "-";
+                document.getElementById('val-prop-sd').innerText = "-";
+                document.getElementById('val-prop-emean').innerText = "-";
+                document.getElementById('val-prop-se').innerText = "-";
+                document.getElementById('val-prop-phat').innerText = "-";
+                document.getElementById('val-prop-ci').innerText = "-";
+                return;
+            }
+
+            let sum = 0;
+            for (let i = 0; i <= rows; i++) sum += i * bins[i];
+            const empMean = sum / completedCount;
+
+            let sumSq = 0;
+            for (let i = 0; i <= rows; i++) sumSq += bins[i] * Math.pow(i - empMean, 2);
+            const empVar = sumSq / completedCount; 
+            const empSD = Math.sqrt(empVar);       
+
+            document.getElementById('val-emp-mean').innerText = empMean.toFixed(2);
+            document.getElementById('val-emp-var').innerText = empVar.toFixed(2);
+            document.getElementById('val-emp-sd').innerText = empSD.toFixed(2);
+
+            let empPhat = empMean / rows;
+            document.getElementById('val-emp-phat').innerText = empPhat.toFixed(3);
+
+            // 統計的推測モード側の数値更新
+            document.getElementById('val-prop-mean').innerText = empMean.toFixed(2);
+            document.getElementById('val-prop-var').innerText = empVar.toFixed(2);
+            document.getElementById('val-prop-sd').innerText = empSD.toFixed(2);
+            
+            // 標本平均の期待値は理論上の母平均 (np = theoMean) と一致
+            let propEmean = document.getElementById('val-prop-emean');
+            if (propEmean) propEmean.innerText = theoMean.toFixed(2);
+
+            let totalScoreSum = 0;
+            for (let i = 0; i <= rows; i++) {
+                totalScoreSum += (i / rows) * bins[i];
+            }
+            lastEmpiricalProp = totalScoreSum / completedCount; 
+
+            let phat = lastEmpiricalProp;
+            document.getElementById('val-prop-phat').innerText = phat.toFixed(3);
+
+            let sePhat = Math.sqrt(phat * (1 - phat) / completedCount);
+            document.getElementById('val-prop-se').innerText = sePhat.toFixed(4);
+
+            let margin = 1.96 * sePhat;
+            let lower = phat - margin;
+            let upper = phat + margin;
+            
+            lastCI = {
+                lower: lower,
+                upper: upper,
+                covered: (lower <= p && p <= upper)
+            };
+
+            let colorStyle = lastCI.covered ? "color: #28a745;" : "color: #dc3545;";
+            let statusText = lastCI.covered ? "(母比率 \\( p \\) を含む ✓)" : "(母比率 \\( p \\) を外れた ✕)";
+            document.getElementById('val-prop-ci').innerHTML = 
+                `<span style="${colorStyle}">[${lower.toFixed(3)}, ${upper.toFixed(3)}]</span> ${statusText}`;
+
+            if (window.MathJax && window.MathJax.typeset) {
+                window.MathJax.typeset([document.getElementById('val-prop-ci')]);
+            }
+        }
+
+        function drawPegs() {
+            const { rowHeight, colWidth } = getLayout();
+            ctx.fillStyle = '#999';
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j <= i; j++) {
+                    const x = startX + (j - i / 2) * colWidth * 2;
+                    const y = startY + i * rowHeight;
+                    ctx.beginPath();
+                    ctx.arc(x, y, pegRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // 組合せ (nCr) の計算用補助関数
+        function combination(n, k) {
+            if (k < 0 || k > n) return 0;
+            if (k === 0 || k === n) return 1;
+            let c = 1;
+            for (let i = 1; i <= k; i++) {
+                c = c * (n - (k - i)) / i;
+            }
+            return c;
+        }
+
+        function drawAll() {
+            drawGaltonCanvas();
+            drawTheoryCanvas();
+        }
+
+        function drawGaltonCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPegs();
+
+            const { rowHeight, colWidth } = getLayout();
+            const binWidth = Math.max(3, colWidth * 2 - 2);
+            const baseY1 = 410; 
+            const maxGraphHeight = 110; 
+            
+            let maxBinCount = Math.max(...bins, 10);
+            const scaleY1 = maxGraphHeight / Math.max(maxBinCount, completedCount * 0.15 + 10); 
+            const showNormal = document.getElementById('show-normal-curve').checked;
+            const showPolygon = document.getElementById('show-polygon').checked;
+            const showSDRange = document.getElementById('show-sd-range').checked;
+
+            // 軸の描画
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            let leftEdge = startX + (0 - rows / 2) * colWidth * 2 - binWidth / 2;
+            let rightEdge = startX + (rows - rows / 2) * colWidth * 2 + binWidth / 2;
+            ctx.moveTo(leftEdge - 5, baseY1);
+            ctx.lineTo(rightEdge + 5, baseY1);
+            ctx.stroke();
+
+            ctx.fillStyle = '#333';
+            ctx.font = rows > 20 ? '9px sans-serif' : '11px sans-serif';
+            ctx.textAlign = 'center';
+            
+            let stepInterval = rows > 22 ? 3 : (rows > 15 ? 2 : 1);
+            for (let i = 0; i <= rows; i++) {
+                const x = startX + (i - rows / 2) * colWidth * 2;
+                ctx.beginPath();
+                ctx.moveTo(x, baseY1);
+                ctx.lineTo(x, baseY1 + 4);
+                ctx.stroke();
+                if (i % stepInterval === 0 || i === rows) {
+                    ctx.fillText(i, x, baseY1 + 16);
+                }
+            }
+
+            let barColor = currentMode === 'count' ? 'rgba(54, 162, 235, 0.6)' : 'rgba(40, 167, 69, 0.6)';
+            ctx.fillStyle = barColor;
+            
+            for (let i = 0; i <= rows; i++) {
+                const x = startX + (i - rows / 2) * colWidth * 2 - binWidth / 2;
+                const h = bins[i] * scaleY1;
+                ctx.fillRect(x, baseY1 - h, binWidth, h);
+                
+                if (bins[i] > 0 && rows <= 20) {
+                    ctx.fillStyle = '#333';
+                    ctx.font = '9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(bins[i], x + binWidth / 2, baseY1 - h - 4);
+                    ctx.fillStyle = barColor;
+                }
+            }
+
+            if (currentMode === 'count') {
+                let xExpect = startX + (theoMean - rows / 2) * colWidth * 2;
+                let yMark = baseY1 + 28;
+                
+                ctx.fillStyle = '#dc3545'; 
+                ctx.beginPath();
+                ctx.moveTo(xExpect, yMark - 3);
+                ctx.lineTo(xExpect - 5, yMark - 10);
+                ctx.lineTo(xExpect + 5, yMark - 10);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#dc3545'; 
+                ctx.fillText(`期待値 E(X) = ${theoMean.toFixed(2)}`, xExpect, yMark + 12);
+
+                if (showSDRange) {
+                    let xLowSD = startX + ((theoMean - theoSD) - rows / 2) * colWidth * 2;
+                    let xHighSD = startX + ((theoMean + theoSD) - rows / 2) * colWidth * 2;
+                    let ySDBar = baseY1 + 48;
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#0056b3'; 
+                    ctx.lineWidth = 4;
+                    ctx.moveTo(xLowSD, ySDBar);
+                    ctx.lineTo(xHighSD, ySDBar);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#0056b3'; 
+                    ctx.beginPath();
+                    ctx.arc(xLowSD, ySDBar, 4, 0, Math.PI * 2);
+                    ctx.arc(xHighSD, ySDBar, 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#0056b3'; 
+                    ctx.fillText(`標準偏差の幅 (μ ± σ) : [${(theoMean - theoSD).toFixed(2)}, ${(theoMean + theoSD).toFixed(2)}]`, xExpect, ySDBar + 16);
+                }
+
+            } else {
+                let xExpect = startX + (theoMean - rows / 2) * colWidth * 2;
+                if (showSDRange) {
+                    let xLowSD = startX + ((theoMean - theoSD) - rows / 2) * colWidth * 2;
+                    let xHighSD = startX + ((theoMean + theoSD) - rows / 2) * colWidth * 2;
+                    let ySDBar = baseY1 + 28;
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#0056b3'; 
+                    ctx.lineWidth = 4;
+                    ctx.moveTo(xLowSD, ySDBar);
+                    ctx.lineTo(xHighSD, ySDBar);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#0056b3'; 
+                    ctx.beginPath();
+                    ctx.arc(xLowSD, ySDBar, 4, 0, Math.PI * 2);
+                    ctx.arc(xHighSD, ySDBar, 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#0056b3'; 
+                    ctx.fillText(`標準偏差の幅 (μ ± σ) : [${(theoMean - theoSD).toFixed(2)}, ${(theoMean + theoSD).toFixed(2)}]`, xExpect, ySDBar + 16);
+                }
+
+                if (completedCount > 20) {
+                    const leftOrigin = startX - (rows / 2) * colWidth * 2;
+                    
+                    let xLow = leftOrigin + (lastCI.lower * rows) * (colWidth * 2);
+                    let xHigh = leftOrigin + (lastCI.upper * rows) * (colWidth * 2);
+                    let yBar = showSDRange ? baseY1 + 54 : baseY1 + 28; 
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = lastCI.covered ? '#28a745' : '#dc3545';
+                    ctx.lineWidth = 4;
+                    ctx.moveTo(xLow, yBar);
+                    ctx.lineTo(xHigh, yBar);
+                    ctx.stroke();
+
+                    ctx.fillStyle = lastCI.covered ? '#28a745' : '#dc3545';
+                    ctx.beginPath();
+                    ctx.arc(xLow, yBar, 4, 0, Math.PI * 2);
+                    ctx.arc(xHigh, yBar, 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = lastCI.covered ? '#28a745' : '#dc3545';
+                    ctx.fillText(`95%信頼区間の幅: [${lastCI.lower.toFixed(3)}, ${lastCI.upper.toFixed(3)}]`, startX, yBar + 16);
+
+                    let xTrueP = leftOrigin + (p * rows) * (colWidth * 2);
+                    let yTrueP = showSDRange ? baseY1 + 82 : baseY1 + 54;
+
+                    ctx.fillStyle = '#dc3545';
+                    ctx.beginPath();
+                    ctx.moveTo(xTrueP, yTrueP - 3);
+                    ctx.lineTo(xTrueP - 5, yTrueP - 9);
+                    ctx.lineTo(xTrueP + 5, yTrueP - 9);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#dc3545';
+                    ctx.fillText(`真の母比率 p = ${p.toFixed(2)}`, xTrueP, yTrueP + 12);
+                }
+            }
+
+            if (showPolygon && completedCount > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#fd7e14'; 
+                ctx.lineWidth = 2.5;
+                for (let i = 0; i <= rows; i++) {
+                    const x = startX + (i - rows / 2) * colWidth * 2;
+                    const y = baseY1 - (bins[i] * scaleY1);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                ctx.fillStyle = '#fd7e14';
+                for (let i = 0; i <= rows; i++) {
+                    const x = startX + (i - rows / 2) * colWidth * 2;
+                    const y = baseY1 - (bins[i] * scaleY1);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            if (showNormal && completedCount > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255, 99, 132, 0.8)';
+                ctx.lineWidth = 2.5;
+                for (let i = 0; i <= rows; i += 0.1) {
+                    const exponent = -Math.pow(i - theoMean, 2) / (2 * theoVar);
+                    const probDensity = (1 / (Math.sqrt(2 * Math.PI * theoVar))) * Math.exp(exponent);
+                    const expectedCount = probDensity * completedCount;
+                    const x = startX + (i - rows / 2) * colWidth * 2;
+                    const y = baseY1 - (expectedCount * scaleY1);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+        }
+
+        function drawTheoryCanvas() {
+            theoryCtx.clearRect(0, 0, theoryCanvas.width, theoryCanvas.height);
+            
+            const { colWidth } = getLayout();
+            const baseY2 = 175;       
+            const theoryGraphH = 110;  
+
+            let probs = [];
+            for (let i = 0; i <= rows; i++) {
+                let prob = combination(rows, i) * Math.pow(p, i) * Math.pow(1 - p, rows - i);
+                probs.push(prob);
+            }
+            let maxProb = Math.max(...probs, 0.01);
+            const scaleY2 = theoryGraphH / maxProb;
+
+            let xZero = startX + (0 - rows / 2) * colWidth * 2;
+            let rightEdge = startX + (rows - rows / 2) * colWidth * 2 + 15;
+
+            theoryCtx.strokeStyle = '#666';
+            theoryCtx.lineWidth = 1.5;
+            theoryCtx.beginPath();
+            theoryCtx.moveTo(xZero, baseY2);
+            theoryCtx.lineTo(xZero, baseY2 - theoryGraphH - 15);
+            theoryCtx.stroke();
+
+            theoryCtx.fillStyle = '#333';
+            theoryCtx.font = 'bold 11px sans-serif';
+            theoryCtx.textAlign = 'center';
+            theoryCtx.fillText('確率 P(X = k)', xZero, baseY2 - theoryGraphH - 22);
+
+            theoryCtx.strokeStyle = '#e9ecef';
+            theoryCtx.lineWidth = 1;
+            theoryCtx.fillStyle = '#666';
+            theoryCtx.font = '10px sans-serif';
+            theoryCtx.textAlign = 'right';
+
+            theoryCtx.fillText('0', xZero - 5, baseY2 + 3);
+
+            let midProb = maxProb / 2;
+            let midY = baseY2 - (midProb * scaleY2);
+            theoryCtx.beginPath();
+            theoryCtx.moveTo(xZero, midY);
+            theoryCtx.lineTo(rightEdge, midY);
+            theoryCtx.stroke();
+            theoryCtx.fillText(midProb.toFixed(2), xZero - 5, midY + 3);
+
+            let maxY = baseY2 - theoryGraphH;
+            theoryCtx.beginPath();
+            theoryCtx.moveTo(xZero, maxY);
+            theoryCtx.lineTo(rightEdge, maxY);
+            theoryCtx.stroke();
+            theoryCtx.fillText(maxProb.toFixed(2), xZero - 5, maxY + 3);
+
+            theoryCtx.strokeStyle = '#666';
+            theoryCtx.lineWidth = 1.5;
+            theoryCtx.beginPath();
+            theoryCtx.moveTo(xZero, baseY2);
+            theoryCtx.lineTo(rightEdge, baseY2);
+            theoryCtx.stroke();
+
+            theoryCtx.fillStyle = '#333';
+            theoryCtx.font = rows > 20 ? '9px sans-serif' : '11px sans-serif';
+            theoryCtx.textAlign = 'center';
+            let stepInterval = rows > 22 ? 3 : (rows > 15 ? 2 : 1);
+            for (let i = 0; i <= rows; i++) {
+                const x = startX + (i - rows / 2) * colWidth * 2;
+                theoryCtx.beginPath();
+                theoryCtx.moveTo(x, baseY2);
+                theoryCtx.lineTo(x, baseY2 + 4);
+                theoryCtx.stroke();
+                if (i % stepInterval === 0 || i === rows) {
+                    theoryCtx.fillText(i, x, baseY2 + 16);
+                }
+            }
+
+            theoryCtx.beginPath();
+            theoryCtx.strokeStyle = '#8a2be2'; 
+            theoryCtx.lineWidth = 2.5;
+            for (let i = 0; i <= rows; i++) {
+                const x = startX + (i - rows / 2) * colWidth * 2;
+                const h = probs[i] * scaleY2;
+                const y = baseY2 - h;
+                if (i === 0) theoryCtx.moveTo(x, y);
+                else theoryCtx.lineTo(x, y);
+            }
+            theoryCtx.stroke();
+
+            theoryCtx.fillStyle = '#8a2be2';
+            for (let i = 0; i <= rows; i++) {
+                const x = startX + (i - rows / 2) * colWidth * 2;
+                const h = probs[i] * scaleY2;
+                const y = baseY2 - h;
+                theoryCtx.beginPath();
+                theoryCtx.arc(x, y, 3.5, 0, Math.PI * 2);
+                theoryCtx.fill();
+            }
+        }
+
+        class Ball {
+            constructor() {
+                this.row = 0;
+                this.col = 0;
+                this.x = startX;
+                this.y = startY;
+                this.targetX = startX;
+                this.targetY = startY;
+                this.progress = 1;
+                this.done = false;
+                
+                this.jitterX = (Math.random() - 0.5) * 6;
+                this.bounceHeight = 3 + Math.random() * 5;
+            }
+
+            update() {
+                if (this.done) return;
+                const { rowHeight, colWidth } = getLayout();
+
+                if (this.progress >= 1) {
+                    if (this.row >= rows) {
+                        this.done = true;
+                        bins[this.col]++;
+                        completedCount++;
+                        updateStats();
+                        return;
+                    }
+                    this.row++;
+                    this.col += Math.random() < p ? 1 : 0;
+                    this.progress = 0;
+                    
+                    const nextX = startX + (this.col - this.row / 2) * colWidth * 2;
+                    const nextY = startY + this.row * rowHeight;
+                    
+                    this.startX = this.x;
+                    this.startY = this.y;
+                    this.targetX = nextX;
+                    this.targetY = nextY;
+                    
+                    this.jitterX = (Math.random() - 0.5) * 6;
+                    this.bounceHeight = 3 + Math.random() * 5;
+                }
+
+                this.progress += dropSpeed;
+                if(this.progress > 1) this.progress = 1;
+                
+                let t = this.progress;
+                let easeY = t * t; 
+                let baseX = this.startX + (this.targetX - this.startX) * t;
+                let baseY = this.startY + (this.targetY - this.startY) * easeY;
+                let arc = Math.sin(t * Math.PI); 
+                
+                this.x = baseX + arc * this.jitterX;
+                this.y = baseY - arc * this.bounceHeight;
+            }
+
+            draw() {
+                if (this.done) return;
+                ctx.fillStyle = '#ff6384';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, ballRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function animate() {
+            drawAll();
+
+            let activeBalls = droppedCount - completedCount;
+            if (isSpawning && droppedCount < targetDropCount && activeBalls < maxActiveBalls) {
+                let spawnRate = (targetDropCount - droppedCount > 200) ? Math.ceil(dropSpeed * 10) : 1; 
+                for(let i=0; i < spawnRate; i++) {
+                    if (droppedCount < targetDropCount && (spawnRate > 1 || Math.random() < 0.6 || targetDropCount - droppedCount === 1)) {
+                        balls.push(new Ball());
+                        droppedCount++;
+                    }
+                }
+                updateStats();
+            }
+
+            if (isSpawning && droppedCount >= targetDropCount) {
+                isSpawning = false;
+            }
+
+            balls = balls.filter(ball => !ball.done);
+            balls.forEach(ball => {
+                ball.update();
+                ball.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        function dropBalls(num) {
+            if (num === Infinity) {
+                targetDropCount = Infinity;
+            } else {
+                targetDropCount = droppedCount + num;
+            }
+            isSpawning = true;
+            updateStats();
+        }
+
+        function stopSpawning() {
+            isSpawning = false;
+            targetDropCount = droppedCount; 
+            updateStats();
+        }
+
+        function resetSimulation() {
+            isSpawning = false;
+            balls = [];
+            bins = new Array(rows + 1).fill(0);
+            droppedCount = 0;
+            completedCount = 0;
+            targetDropCount = 0;
+            updateStats();
+        }
+
+        // 初期化
+        updateTheoStats();
+        animate();
+    </script>
+</body>
+</html>
